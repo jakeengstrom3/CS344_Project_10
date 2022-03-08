@@ -21,6 +21,9 @@ int get_address(int page, int offset)
     return (page << PAGE_SHIFT) | offset;
 }
 
+//
+// Return the process's page table page number
+//
 int get_page_table(int proc_num)
 {
     return mem[PAGE_COUNT + proc_num]; // Zero page process page table number table starts at index PAGE_COUNT
@@ -31,9 +34,7 @@ int get_page_table(int proc_num)
 //
 void initialize_mem(void)
 {
-
     // Sets all values of free page table to 0 (all pages not in use)
-
     mem[0] = 1; // set zero page to in use
 
     for (int i = 1; i > MEM_SIZE; i++)
@@ -47,7 +48,7 @@ void initialize_mem(void)
 //
 // Returns the number of the page, or 0xff if no more pages available
 //
-unsigned char get_page(void)
+unsigned char find_page(void)
 {
     // Loop free page map, return first free page (start on one because zero page is always in use)
     for (unsigned char i = 1; i < PAGE_COUNT; i++)
@@ -75,42 +76,46 @@ void new_process(int proc_num, int page_count)
         return;
     }
 
-    int proc_page_table_num = get_page(); // Get next avaiable page
-
+    int proc_page_table_num = find_page(); 
     mem[PAGE_COUNT + proc_num] = proc_page_table_num; // Store new processes page table number in the page table map
-    int proc_page_table_addr = proc_page_table_num << PAGE_SHIFT;
 
     for (int virtual_page_num = 0; virtual_page_num < page_count; virtual_page_num++)
     {
-        int proc_data_page_num = get_page();
-        mem[proc_page_table_addr + virtual_page_num] = proc_data_page_num; // Go to the process's page table (page num * page size), and store the process's data_page numbers in the page table
+        int proc_data_page_num = find_page(); // Get a new page for each data page
+        mem[get_address(proc_page_table_num, virtual_page_num)] = proc_data_page_num; // Go to the process's page table address, and store the process's data_page numbers in the page table
     }
 }
 
+//
+// Sets the zero page to mark page page_num as free
+//
 void deallocate_page(int page_num)
 {
     mem[page_num] = 0;
 }
 
-void kill(int pid)
+//
+// Sets a process's data pages and page table to free
+//
+void kill(int proc_num)
 {
-    // printf("Killing process #%d\n", pid);
-    int process_page_table = get_page_table(pid);
+    int process_page_table = get_page_table(proc_num);
     for (int offset = 0; offset < PAGE_SIZE; offset++)
     {
         int data_page_address = get_address(process_page_table, offset);
         if (mem[data_page_address] != 0) // If the page is not free
         {                                               // If there is an entry at this location in the page table
             int data_page_num = mem[data_page_address]; // Get data_page number
-            // printf("Freeing page #%d\n", data_page_num);
             deallocate_page(data_page_num); // Free the page
             mem[data_page_address] = 0;     // Remove entry from the page_table
         }
     }
-    // printf("Freeing page table #%d\n", process_page_table);
     deallocate_page(process_page_table);
 }
 
+//
+// Returns physical address from a process's virtual addres
+//
 int get_physical_address(int process_num, int virtual_address)
 {
     int virtual_page = virtual_address >> 8;           // Find the virtual page (Top bits)
@@ -122,6 +127,9 @@ int get_physical_address(int process_num, int virtual_address)
     return get_address(physical_page_num, offset); // Return the address to the physical page + the offset
 }
 
+//
+// Stores the value a a process's virtual address
+//
 void store_value(int proc_num, int virtual_address, int value)
 {
     int address = get_physical_address(proc_num, virtual_address);
@@ -131,6 +139,9 @@ void store_value(int proc_num, int virtual_address, int value)
            proc_num, virtual_address, address, value);
 }
 
+//
+// Returns the value at a process's virtual address
+//
 unsigned char read_value(int proc_num, int virtual_address)
 {
     int address = get_physical_address(proc_num, virtual_address);
