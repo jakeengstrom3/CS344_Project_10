@@ -36,7 +36,6 @@ void initialize_mem(void)
 {
     // Sets all values of free page table to 0 (all pages not in use)
     mem[0] = 1; // set zero page to in use
-
     for (int i = 1; i > MEM_SIZE; i++)
     {
         mem[i] = 0;
@@ -64,6 +63,30 @@ unsigned char find_page(void)
 }
 
 //
+// Allocates a page table for a process with proc_num. (In zero page: sets page to in use in Free Page Map, stores page num in Page Table Map) 
+// 
+// Returns the page_table's number
+//
+int allocate_page_table(int proc_num)
+{
+    int proc_page_table_num = find_page();
+    mem[PAGE_COUNT + proc_num] = proc_page_table_num;
+    return proc_page_table_num;
+}
+
+//
+// Allocates page_count pages, storing physical page numbers in the process's page table entries
+//
+void allocate_data_pages(int page_count, int proc_page_table_num)
+{
+    for (int virtual_page_num = 0; virtual_page_num < page_count; virtual_page_num++)
+    {
+        int proc_data_page_num = find_page(); // Get a new page for each data page
+        mem[get_address(proc_page_table_num, virtual_page_num)] = proc_data_page_num; // Go to the process's page table address, and store the process's data_page numbers in the page table
+    }
+}
+
+//
 // Allocate pages for a new process
 //
 // This includes the new process page table and page_count data pages.
@@ -75,15 +98,8 @@ void new_process(int proc_num, int page_count)
         printf("Could not allocate space for process #%d\n", proc_num);
         return;
     }
-
-    int proc_page_table_num = find_page(); 
-    mem[PAGE_COUNT + proc_num] = proc_page_table_num; // Store new processes page table number in the page table map
-
-    for (int virtual_page_num = 0; virtual_page_num < page_count; virtual_page_num++)
-    {
-        int proc_data_page_num = find_page(); // Get a new page for each data page
-        mem[get_address(proc_page_table_num, virtual_page_num)] = proc_data_page_num; // Go to the process's page table address, and store the process's data_page numbers in the page table
-    }
+    int proc_page_table_num = allocate_page_table(proc_num); 
+    allocate_data_pages(page_count, proc_page_table_num);
 }
 
 //
@@ -100,17 +116,17 @@ void deallocate_page(int page_num)
 void kill(int proc_num)
 {
     int process_page_table = get_page_table(proc_num);
-    for (int offset = 0; offset < PAGE_SIZE; offset++)
+    for (int offset = 0; offset < PAGE_SIZE; offset++)  // Loop all entries in the page table
     {
         int data_page_address = get_address(process_page_table, offset);
-        if (mem[data_page_address] != 0) // If the page is not free
-        {                                               // If there is an entry at this location in the page table
+        if (mem[data_page_address] != 0)                // If there is an entry at this location in the page table
+        {                                               //  then:
             int data_page_num = mem[data_page_address]; // Get data_page number
-            deallocate_page(data_page_num); // Free the page
-            mem[data_page_address] = 0;     // Remove entry from the page_table
+            deallocate_page(data_page_num);             // Free the page
+            mem[data_page_address] = 0;                 // Remove entry from the page_table
         }
     }
-    deallocate_page(process_page_table);
+    deallocate_page(process_page_table);                // Deallocate page table
 }
 
 //
